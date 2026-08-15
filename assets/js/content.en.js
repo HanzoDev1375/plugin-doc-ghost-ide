@@ -35,6 +35,9 @@ var CONTENT_EN = {
       'ide-host-services': 'IdeHostServices',
       'editor-host': 'EditorHost',
       'file-manager-host': 'FileManagerHost',
+      'code-runner-host': 'CodeRunnerHost',
+      'editor-panel': 'EditorPanel',
+      'editor-action-handler': 'EditorActionHandler',
       'plugin-screen': 'PluginScreen',
       'gpl-format': '.gpl Format',
       'build-plugin': 'Building a Plugin',
@@ -52,7 +55,7 @@ var CONTENT_EN = {
     ctaSecondary: 'GitHub repo',
     stats: [
       { value: '3', label: 'independent API modules' },
-      { value: '2', label: 'ready-made extension points' },
+      { value: '4', label: 'ready-made extension points' },
       { value: 'Java 17', label: 'language & version' }
     ],
     mock: {
@@ -116,7 +119,7 @@ var CONTENT_EN = {
         { type: 'modulemap', items: [
           { name: 'plugin-api', desc: 'The plugin model itself: PluginContext, ExtensionPoint/Registry, ServiceKey/Registry, GlobalRegistry.' },
           { name: 'ide-api', desc: 'Depends on plugin-api. The LSP_SERVER_PROVIDER extension point for adding a language server.' },
-          { name: 'ide-ui-api', desc: 'Depends on plugin-api. The PLUGIN_SCREEN extension point plus EditorHost/FileManagerHost services.' }
+          { name: 'ide-ui-api', desc: 'Depends on plugin-api. The PLUGIN_SCREEN / EDITOR_PANEL / EDITOR_ACTION_HANDLER extension points plus the EditorHost, FileManagerHost and CodeRunnerHost services.' }
         ] },
         { type: 'p', text: 'The `:app` module (the app itself) depends on all three, and is the only place where the real registry implementations (`DefaultExtensionRegistry`, `DefaultServiceRegistry`) and the plugin loader (`GplPluginLoader`) actually live. Plugin code never talks to `:app`\u2019s internal classes directly \u2014 only to the `plugin-api`/`ide-api`/`ide-ui-api` interfaces.' },
         { type: 'h2', text: 'Two shared registries' },
@@ -151,8 +154,14 @@ var CONTENT_EN = {
         ] },
         { type: 'code', filename: 'build.gradle', lang: 'gradle', code:
 `dependencies {
-  compileOnly 'ir.hanzodev1375.ghostide:plugin-api:0.1.0'
+  // plugin-api, ide-api and ide-ui-api are NOT on any public repository.
+  // Download them from GitHub Actions ("ghostide-plugin-sdk" artifact)
+  // or from a Release, then point to the local jar/aar files:
+  compileOnly files('libs/plugin-api.jar')
+  compileOnly files('libs/ide-api.jar')
+  compileOnly files('libs/ide-ui-api.aar')
 }` },
+        { type: 'note', variant: 'info', text: 'The `ir.hanzodev1375.ghostide:...` group is **not published anywhere** \u2014 the host app ships these APIs itself. Grab the compiled files from the **ghostide-plugin-sdk** artifact of [GitHub Actions](https://github.com/HanzoDev1375/GhostIdes/actions) or from a [Release](https://github.com/HanzoDev1375/GhostIdes/releases) of the Ghost IDE repo.' },
         { type: 'note', variant: 'tip', text: 'To see all six steps with real, complete code, go to the [Hello Ghost example](#/example/hello-world) \u2014 it walks through this exact path end to end.' }
       ]
     },
@@ -371,10 +380,12 @@ public List<PluginSetupAction> getSetupActions() {
       module: 'plugin-api',
       dek: 'The contract a group of registered capabilities must implement.',
       blocks: [
-        { type: 'p', text: 'A simple `record` holding a unique id and the `Class` type every registration must implement. The platform ships with exactly two extension points today:' },
+        { type: 'p', text: 'A simple `record` holding a unique id and the `Class` type every registration must implement. The platform ships with four extension points today:' },
         { type: 'table', headers: ['Extension point', 'Type', 'Module'], rows: [
           ['`EditorExtensionPoints.LSP_SERVER_PROVIDER`', '`LspServerProvider`', '`ide-api`'],
-          ['`PluginUiExtensionPoints.PLUGIN_SCREEN`', '`PluginScreen`', '`ide-ui-api`']
+          ['`PluginUiExtensionPoints.PLUGIN_SCREEN`', '`PluginScreen`', '`ide-ui-api`'],
+          ['`PluginUiExtensionPoints.EDITOR_PANEL`', '`EditorPanel`', '`ide-ui-api`'],
+          ['`PluginUiExtensionPoints.EDITOR_ACTION_HANDLER`', '`EditorActionHandler`', '`ide-ui-api`']
         ] },
         { type: 'code', filename: 'ExtensionPoint.java', lang: 'java', code:
 `public record ExtensionPoint<T>(String id, Class<T> type) {
@@ -388,7 +399,7 @@ public List<PluginSetupAction> getSetupActions() {
     }
   }
 }` },
-        { type: 'p', text: 'For details on each, see [LspServerProvider](#/lsp/lsp-server-provider) or [PluginScreen](#/ui/plugin-screen).' }
+        { type: 'p', text: 'For details on each, see [LspServerProvider](#/lsp/lsp-server-provider), [PluginScreen](#/ui/plugin-screen), [EditorPanel](#/ui/editor-panel) or [EditorActionHandler](#/ui/editor-action-handler).' }
       ]
     },
 
@@ -490,7 +501,7 @@ public List<PluginSetupAction> getSetupActions() {
     }
   }
 }` },
-        { type: 'p', text: 'The `ide-ui-api` module publishes three ready-made keys \u2014 `IdeHostServices.EDITOR_HOST`, `FILE_MANAGER_HOST` and `PLUGIN_ANDROID_CONTEXT`. See [IdeHostServices](#/ui/ide-host-services) for details.' }
+        { type: 'p', text: 'The `ide-ui-api` module publishes five ready-made keys \u2014 `IdeHostServices.EDITOR_HOST`, `FILE_MANAGER_HOST`, `CODE_RUNNER_HOST`, `PLUGIN_ANDROID_CONTEXT` and `PROOT_PROCESS_LAUNCHER`. See [IdeHostServices](#/ui/ide-host-services) for details.' }
       ]
     },
 
@@ -686,7 +697,7 @@ public interface LspServerConnectionFactory {
       blocks: [
         { type: 'p', text: '`ide-ui-api` is an Android library (namespace: `ir.hanzodev1375.ghostide.ide.ui.api`, `minSdk 26`, `compileSdk 36`) that builds on `plugin-api` and `androidx.appcompat`.' },
         { type: 'note', variant: 'info', text: 'Android doesn\u2019t let dynamically loaded code declare a new `<activity>` in the host\u2019s manifest. That\u2019s why a plugin\u2019s \u201cscreen\u201d is actually a `Fragment`, not an Activity \u2014 the same technique Android plugin frameworks commonly use. The host app has a single screen-hosting Activity that displays this Fragment.' },
-        { type: 'p', text: 'To add a screen, see the [PluginScreen](#/ui/plugin-screen) interface. To reach the open editor or file manager, see [EditorHost](#/ui/editor-host) and [FileManagerHost](#/ui/file-manager-host).' }
+        { type: 'p', text: 'To add a screen, see the [PluginScreen](#/ui/plugin-screen) interface. To slide a panel inside the running editor, see [EditorPanel](#/ui/editor-panel). To reach the open editor or file manager, see [EditorHost](#/ui/editor-host) and [FileManagerHost](#/ui/file-manager-host). To run code or a shell command, see [CodeRunnerHost](#/ui/code-runner-host). To intercept your language server\u2019s commands locally, see [EditorActionHandler](#/ui/editor-action-handler).' }
       ]
     },
 
@@ -705,8 +716,14 @@ public interface LspServerConnectionFactory {
   public static final ServiceKey<FileManagerHost> FILE_MANAGER_HOST =
       new ServiceKey<>("ir.hanzodev1375.ghostide.ui.fileManagerHost", FileManagerHost.class);
 
+  public static final ServiceKey<CodeRunnerHost> CODE_RUNNER_HOST =
+      new ServiceKey<>("ir.hanzodev1375.ghostide.ui.codeRunnerHost", CodeRunnerHost.class);
+
   public static final ServiceKey<Context> PLUGIN_ANDROID_CONTEXT =
       new ServiceKey<>("ir.hanzodev1375.ghostide.ui.pluginAndroidContext", Context.class);
+
+  public static final ServiceKey<ProotProcessLauncher> PROOT_PROCESS_LAUNCHER =
+      new ServiceKey<>("ir.hanzodev1375.ghostide.ui.prootProcessLauncher", ProotProcessLauncher.class);
 }` },
         { type: 'h2', text: 'PLUGIN_ANDROID_CONTEXT' },
         { type: 'p', text: 'A `Context` scoped to the plugin itself, not to the host Activity. To inflate a `PluginScreen`\u2019s layout you must go through this Context, not the host Activity\u2019s default inflater \u2014 otherwise the plugin\u2019s own `R.layout` ids won\u2019t resolve.' },
@@ -714,7 +731,9 @@ public interface LspServerConnectionFactory {
 `Context pluginContext = context.getServices().require(IdeHostServices.PLUGIN_ANDROID_CONTEXT);
 LayoutInflater.from(pluginContext)
     .cloneInContext(pluginContext)
-    .inflate(R.layout.my_screen, container, false);` }
+    .inflate(R.layout.my_screen, container, false);` },
+        { type: 'h2', text: 'CODE_RUNNER_HOST' },
+        { type: 'p', text: 'The service a plugin asks for when it wants to run code or a shell command \u2014 see [CodeRunnerHost](#/ui/code-runner-host).' }
       ]
     },
 
@@ -739,10 +758,21 @@ LayoutInflater.from(pluginContext)
   void openFile(File file);
 
   Context getContext();
+
+  // Optional: the raw editor widget, or null when no file is open
+  Object getEditor();
 }` },
         { type: 'code', filename: 'HelloGhostPlugin.java', lang: 'java', code:
 `EditorHost editor = context.getServices().require(IdeHostServices.EDITOR_HOST);
-editor.setEditorText(editor.getEditorText() + "\\n// added by HelloGhost");` }
+editor.setEditorText(editor.getEditorText() + "\\n// added by HelloGhost");` },
+        { type: 'h2', text: 'getEditor()' },
+        { type: 'p', text: 'The plain methods above are enough for most plugins. `getEditor()` is the escape hatch: it returns the real editor widget behind the current tab \u2014 the host\u2019s `IdeEditor` \u2014 as an `Object`, or `null` when no file is open. `IdeEditor` lives in the host editor module, not in this API, so add that module as a `compileOnly` dependency to cast:' },
+        { type: 'code', filename: 'HelloGhostPlugin.java', lang: 'java', code:
+`Object raw = editor.getEditor();
+if (raw instanceof IdeEditor ide) {   // add ':editor' as compileOnly to cast
+  String path = ide.getCurrentFilePath();
+  ide.getLspEditor();
+}` }
       ]
     },
 
@@ -771,6 +801,129 @@ fileManager.refresh();` }
       ]
     },
 
+    'code-runner-host': {
+      title: 'CodeRunnerHost',
+      filename: 'CodeRunnerHost.java',
+      module: 'ide-ui-api',
+      dek: 'Runs a shell command or a source file in the IDE terminal \u2014 exactly like pressing the editor\u2019s run (FAB) button.',
+      blocks: [
+        { type: 'p', text: 'Registered by the host under `IdeHostServices.CODE_RUNNER_HOST`. Use it whenever your plugin needs to run code or a shell command \u2014 the command is handed to the IDE terminal, which opens either as a bottom sheet or as a full screen.' },
+        { type: 'code', filename: 'CodeRunnerHost.java', lang: 'java', code:
+`public interface CodeRunnerHost {
+
+  void runShell(String command, boolean asBottomSheet);
+
+  void runCurrentFile(boolean asBottomSheet);
+
+  void runFile(String filePath, boolean asBottomSheet);
+
+  boolean isSupported(String filePath);
+}` },
+        { type: 'table', headers: ['Method', 'Description'], rows: [
+          ['`runShell(command, asBottomSheet)`', 'Runs any shell command in the terminal.'],
+          ['`runCurrentFile(asBottomSheet)`', 'Runs the file that is currently open in the editor, like the FAB.'],
+          ['`runFile(filePath, asBottomSheet)`', 'Runs a specific file by path.'],
+          ['`isSupported(filePath)`', '`true` if the runner knows how to execute that file type.']
+        ] },
+        { type: 'p', text: 'The `asBottomSheet` argument decides how the terminal is shown: `true` opens it as a bottom sheet, `false` as a full screen.' },
+        { type: 'code', filename: 'HelloGhostPlugin.java', lang: 'java', code:
+`CodeRunnerHost runner = context.getServices().require(IdeHostServices.CODE_RUNNER_HOST);
+
+// run any command in the terminal
+runner.runShell("python3 main.py", true);
+
+// run the file currently open in the editor
+runner.runCurrentFile();
+
+// run a specific file
+runner.runFile("/sdcard/Project/main.py", false);
+
+// check before running
+if (runner.isSupported("/sdcard/Project/main.py")) {
+  runner.runFile("/sdcard/Project/main.py", true);
+}` },
+        { type: 'note', variant: 'tip', text: '`runCurrentFile()` decides the path through the registered `EditorPanel`s: the first non-blank `EditorPanel.getLastPath()` wins, otherwise it falls back to the file open in the editor. See [EditorPanel](#/ui/editor-panel).' }
+      ]
+    },
+
+    'editor-panel': {
+      title: 'EditorPanel',
+      filename: 'EditorPanel.java',
+      module: 'ide-ui-api',
+      dek: 'A UI panel a plugin slides into the running editor screen \u2014 the VS Code \u201cwebview / side panel\u201d equivalent.',
+      blocks: [
+        { type: 'p', text: 'Register an implementation at `PluginUiExtensionPoints.EDITOR_PANEL`. The host creates the panel\u2019s `View` once when it is first shown and keeps it for the rest of the Activity\u2019s lifetime, so build your view lazily and keep its state inside it.' },
+        { type: 'code', filename: 'EditorPanel.java', lang: 'java', code:
+`public interface EditorPanel {
+
+  String getId();
+
+  String getTitle();
+
+  View createView();
+
+  // Optional: which file/path this panel is about
+  default String getLastPath() {
+    return null;
+  }
+}` },
+        { type: 'p', text: 'Inflate layouts with the plugin\u2019s own scoped context, or your `R.layout` ids will not resolve:' },
+        { type: 'code', filename: 'MyPanel.java', lang: 'java', code:
+`Context pluginContext = context.getServices().require(IdeHostServices.PLUGIN_ANDROID_CONTEXT);
+View view = LayoutInflater.from(pluginContext)
+    .cloneInContext(pluginContext)
+    .inflate(R.layout.my_panel, root, false);` },
+        { type: 'h2', text: 'getLastPath()' },
+        { type: 'p', text: 'Returns the path your panel is currently about \u2014 for example a file the panel\u2019s user picked. The host consults every panel\u2019s `getLastPath()` when running the current file (`CodeRunnerHost.runCurrentFile()`); if you return `null`, the host falls back to the file open in the editor.' },
+        { type: 'note', variant: 'tip', text: 'To show a panel with a different window style, override `getState()` / call `setState(PluginStateMod)` \u2014 side sheet, dialog, bottom sheet and more are all supported.' }
+      ]
+    },
+
+    'editor-action-handler': {
+      title: 'EditorActionHandler',
+      filename: 'EditorActionHandler.java',
+      module: 'ide-ui-api',
+      dek: 'Lets a plugin intercept its own LSP command actions locally instead of forwarding them back to the language server.',
+      blocks: [
+        { type: 'p', text: 'Commands the editor receives from LSP code actions are normally forwarded back to the server via `workspace/executeCommand`. Registering an `EditorActionHandler` at `PluginUiExtensionPoints.EDITOR_ACTION_HANDLER` lets your plugin handle its own commands locally \u2014 where the raw editor widget is available.' },
+        { type: 'code', filename: 'EditorActionHandler.java', lang: 'java', code:
+`public interface EditorActionHandler {
+
+  String getCommandId();
+
+  boolean execute(Object editor, String command, List<Object> arguments);
+}` },
+        { type: 'table', headers: ['Method', 'Description'], rows: [
+          ['`getCommandId()`', 'The command id this handler owns \u2014 the editor only calls you for commands with this exact id.'],
+          ['`execute(editor, command, arguments)`', 'Runs the command. Return `true` if you handled it; `false` lets the editor forward it to the server as before.']
+        ] },
+        { type: 'p', text: 'The `editor` argument is the raw `IdeEditor` widget behind the action (an `Object` because `IdeEditor` lives in the host editor module, not in this API), or `null` when no editor is attached. Add the host editor module as a `compileOnly` dependency to cast:' },
+        { type: 'code', filename: 'MyActionHandler.java', lang: 'java', code:
+`public final class MyActionHandler implements EditorActionHandler {
+
+  @Override
+  public String getCommandId() {
+    return "com.example.myplugin.run";
+  }
+
+  @Override
+  public boolean execute(Object editor, String command, List<Object> arguments) {
+    if (editor instanceof IdeEditor ide) {   // add ':editor' as compileOnly to cast
+      ide.getCurrentFilePath();
+    }
+    return true;
+  }
+}` },
+        { type: 'code', filename: 'RustPlugin.java', lang: 'java', code:
+`context.getExtensions().register(
+    PluginUiExtensionPoints.EDITOR_ACTION_HANDLER,
+    new MyActionHandler(),
+    context.getDescriptor().getId(),
+    0);` },
+        { type: 'note', variant: 'warn', text: '`execute` may run on a background thread, so hop back to the UI thread before touching the editor.' }
+      ]
+    },
+
     'plugin-screen': {
       title: 'PluginScreen',
       filename: 'PluginScreen.java',
@@ -789,8 +942,16 @@ fileManager.refresh();` }
         { type: 'p', text: 'Register an instance at the `PluginUiExtensionPoints.PLUGIN_SCREEN` extension point. The Fragment\u2019s layout and resources come from the plugin\u2019s own `.gpl` bundle, not from the host app\u2019s resources.' },
         { type: 'code', filename: 'PluginUiExtensionPoints.java', lang: 'java', code:
 `public final class PluginUiExtensionPoints {
+
   public static final ExtensionPoint<PluginScreen> PLUGIN_SCREEN =
       new ExtensionPoint<>("ir.hanzodev1375.ghostide.ui.pluginScreen", PluginScreen.class);
+
+  public static final ExtensionPoint<EditorPanel> EDITOR_PANEL =
+      new ExtensionPoint<>("ir.hanzodev1375.ghostide.ui.editorPanel", EditorPanel.class);
+
+  public static final ExtensionPoint<EditorActionHandler> EDITOR_ACTION_HANDLER =
+      new ExtensionPoint<>(
+          "ir.hanzodev1375.ghostide.ui.editorActionHandler", EditorActionHandler.class);
 }` },
         { type: 'p', text: 'For a complete implementation \u2014 including the Fragment itself \u2014 see the [Hello Ghost example](#/example/hello-world).' }
       ]
@@ -814,7 +975,8 @@ fileManager.refresh();` }
           ['`version`', 'string', 'Required.'],
           ['`entryClass`', 'string', 'Required \u2014 the fully-qualified name of the class implementing `GhostPlugin`, with a public no-arg constructor.'],
           ['`description`', 'string', 'Optional; default is an empty string.'],
-          ['`minHostVersion`', 'integer', 'Optional; default `0`. The lowest host app versionCode that supports this plugin.']
+          ['`minHostVersion`', 'integer', 'Optional; default `0`. The lowest host app versionCode that supports this plugin.'],
+          ['`icon`', 'string', 'Optional; a PNG/JPG file name inside `assets/` (same folder as `plugin.json` itself). If missing, the plugin has no icon.']
         ] },
         { type: 'code', filename: 'assets/plugin.json', lang: 'json', code:
 `{
@@ -823,7 +985,8 @@ fileManager.refresh();` }
   "version": "1.0.0",
   "entryClass": "com.example.helloghost.HelloGhostPlugin",
   "description": "Adds a sample screen to Ghost IDE.",
-  "minHostVersion": 1
+  "minHostVersion": 1,
+  "icon": "icon.png"
 }` },
         { type: 'note', variant: 'warn', text: 'If `assets/plugin.json` is missing from the zip, or the JSON is invalid, loading fails and the plugin never activates.' }
       ]
@@ -848,6 +1011,7 @@ fileManager.refresh();` }
 cd build/dex
 zip -r ../hello-ghost.gpl classes.dex ../../assets/plugin.json -j
 mv ../../assets/plugin.json assets/plugin.json 2>/dev/null || true` },
+        { type: 'note', variant: 'tip', text: 'To compile against the APIs you\u2019ll need the compiled `plugin-api.jar` / `ide-api.jar` / `ide-ui-api.aar` \u2014 grab them from the **ghostide-plugin-sdk** artifact of [GitHub Actions](https://github.com/HanzoDev1375/GhostIdes/actions) or from a [Release](https://github.com/HanzoDev1375/GhostIdes/releases).' },
         { type: 'note', variant: 'tip', text: 'The simplest way to guarantee the right layout is to assemble a temporary staging folder with the same structure before zipping: `classes.dex` at the root and `assets/plugin.json` in a nested `assets/` folder \u2014 exactly what `GplManifestReader` looks for at `assets/plugin.json`.' }
       ]
     },
@@ -896,7 +1060,15 @@ mv ../../assets/plugin.json assets/plugin.json 2>/dev/null || true` },
   return dir;
 }` },
         { type: 'p', text: 'At startup, `loadAll(context, loader)` scans every file in that folder and calls `loader.load(file)` for any id that isn\u2019t already loaded.' },
-        { type: 'note', variant: 'tip', text: 'A broken plugin or invalid manifest doesn\u2019t stop the whole scan \u2014 that one is skipped, and the rest of the plugins still come up normally.' }
+        { type: 'note', variant: 'tip', text: 'A broken plugin or invalid manifest doesn\u2019t stop the whole scan \u2014 that one is skipped, and the rest of the plugins still come up normally.' },
+        { type: 'h2', text: 'Where do plugins come from?' },
+        { type: 'p', text: 'Plugins are not published to any separate store. Ready-made `.gpl` bundles are shared from the Ghost IDE repository itself \u2014 download them from the **Actions** tab of the relevant workflow run, or from the file attachments of a **Release**:' },
+        { type: 'code', filename: 'GitHub', lang: 'text', code:
+`https://github.com/HanzoDev1375/GhostIdes
+
+Releases   -> attach a .gpl file to a release, users grab it from there
+Actions    -> every workflow run keeps its artifacts for 90 days, including .gpl bundles` },
+        { type: 'note', variant: 'info', text: 'The `app-debug` workflow artifact is the APK itself, `ghostide-plugin-sdk` holds the jars/AAR you compile plugins against, and any `.gpl` bundles a plugin author wants to share show up as release attachments or workflow artifacts as well.' }
       ]
     },
 
@@ -991,7 +1163,8 @@ public final class HelloScreen implements PluginScreen {
   "version": "1.0.0",
   "entryClass": "com.example.helloghost.HelloGhostPlugin",
   "description": "Adds a sample screen to Ghost IDE.",
-  "minHostVersion": 1
+  "minHostVersion": 1,
+  "icon": "icon.png"
 }` },
         { type: 'h2', text: '4. Package and install' },
         { type: 'list', ordered: true, items: [

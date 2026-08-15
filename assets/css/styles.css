@@ -45,6 +45,9 @@
 html{ -webkit-text-size-adjust: 100%; }
 
 html, body{ height: 100%; }
+/* clip (not hidden): hidden turns overflow-y into "auto", making body its own
+   scroll container and breaking viewport scrolling / pull-to-refresh */
+html, body{ overflow-x: clip; }
 
 body{
   margin: 0;
@@ -154,8 +157,8 @@ button{ font-family: inherit; }
 }
 .brand:hover{ text-decoration: none; }
 .brand__mark{
-  width: 30px; height: 30px;
-  border-radius: 8px;
+  width: 32px; height: 32px;
+  border-radius: 9px;
   background: var(--bg-inset);
   border: 1px solid var(--border-strong);
   display: flex; align-items: center; justify-content: center;
@@ -163,7 +166,15 @@ button{ font-family: inherit; }
   font-family: var(--font-mono);
   font-size: 13px;
   flex: none;
+  overflow: hidden;
+  box-shadow: 0 0 0 0 rgba(143,163,255,0);
+  transition: transform .18s ease, box-shadow .18s ease;
 }
+.brand:hover .brand__mark{
+  transform: scale(1.06) rotate(-2deg);
+  box-shadow: 0 0 0 4px rgba(143,163,255,.14), 0 4px 16px rgba(0,0,0,.35);
+}
+.brand__mark img{ width: 100%; height: 100%; object-fit: cover; }
 .brand__name b{ color: var(--text); font-weight: 700; }
 .brand__name span{ color: var(--text-faint); font-weight: 500; }
 .brand__name{ display: flex; flex-direction: column; line-height: 1.15; }
@@ -335,6 +346,12 @@ body[dir="rtl"] .navgroup.is-open .navgroup__chev svg{ transform: rotate(-90deg)
   color: var(--text-muted);
   font-size: 13px;
   font-family: var(--font-mono);
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
+}
+body[dir="rtl"] .navlink, body[dir="rtl"] .navgroup__head{
+  font-family: var(--font-body);
 }
 .navlink:hover{ background: var(--bg-hover); color: var(--text); text-decoration: none; }
 .navlink.is-active{ background: var(--accent-soft); color: var(--accent); font-weight: 600; }
@@ -397,7 +414,7 @@ main.content{
   color: var(--text-muted);
 }
 .filehead__dot{ width: 8px; height: 8px; border-radius: 50%; background: var(--mint); flex: none; }
-.filehead__name{ color: var(--text); font-weight: 600; }
+.filehead__name{ color: var(--text); font-weight: 600; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .filehead__kind{
   margin-inline-start: auto;
   font-size: 10.5px;
@@ -444,7 +461,22 @@ h1.page-title{ font-size: 28px; margin-bottom: 10px; }
   border-radius: 5px;
   font-size: .87em;
   color: var(--mint);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
+
+/* Persian/RTL-safe wrapping: long words (Farsi, mixed tokens) must wrap
+   instead of spilling out of the page */
+.prose p, .prose li, .prose h2, .prose h3,
+.page-dek, .note, .note div,
+.homecard p, .modulemap__card, .modulemap__card span,
+.breadcrumbs, .filehead__name, .pagebox,
+.pagernav .title, .search-results .sr-title{
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.note > div{ min-width: 0; }
+.prose li > a, .note a, .prose p a{ overflow-wrap: anywhere; }
 
 /* ==========================================================================
    Code blocks
@@ -551,12 +583,15 @@ h1.page-title{ font-size: 28px; margin-bottom: 10px; }
 
 table.apitable{
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   margin: 1.3em 0;
   font-size: 13.5px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
+  table-layout: auto;
+  min-width: 0;
 }
 table.apitable th{
   background: var(--bg-inset);
@@ -568,12 +603,17 @@ table.apitable th{
   text-transform: uppercase;
   letter-spacing: .04em;
   border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 table.apitable td{
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
   vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 table.apitable tr:last-child td{ border-bottom: none; }
 table.apitable td code{
@@ -584,8 +624,11 @@ table.apitable td code{
   padding: .1em .4em;
   border-radius: 4px;
   font-size: 12.5px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
-table.apitable td:first-child{ color: var(--text); font-weight: 600; white-space: nowrap; }
+table.apitable td:first-child{ color: var(--text); font-weight: 600; white-space: normal; }
 
 .badge{
   display: inline-flex;
@@ -829,6 +872,144 @@ footer.sitefoot{
 footer.sitefoot a{ color: var(--text-muted); }
 
 /* ==========================================================================
+   Motion & animation
+   ========================================================================== */
+
+/* ambient background glow that slowly drifts — makes the site feel alive */
+body::before{
+  content: '';
+  position: fixed;
+  top: -20%;
+  left: 0;
+  right: 0;
+  height: 70vh;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 46% at 22% 30%, rgba(143,163,255,.09), transparent 70%),
+    radial-gradient(38% 42% at 78% 24%, rgba(127,231,196,.07), transparent 70%),
+    radial-gradient(30% 36% at 50% 60%, rgba(242,178,92,.05), transparent 70%);
+  animation: bg-drift 22s ease-in-out infinite alternate;
+}
+@keyframes bg-drift{
+  0%{ transform: translate3d(-1.5%, -1%, 0) scale(1); }
+  100%{ transform: translate3d(1.5%, 1.5%, 0) scale(1.06); }
+}
+
+/* route-change entrance: every page fades/slides in */
+.content__inner{ animation: page-in .34s cubic-bezier(.21,.7,.3,1) both; }
+@keyframes page-in{
+  from{ opacity: 0; transform: translateY(8px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+/* generic reveal for scroll-triggered elements */
+.reveal{
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity .5s ease, transform .5s cubic-bezier(.21,.7,.3,1);
+}
+.reveal.is-visible{ opacity: 1; transform: translateY(0); }
+
+/* hero entrance — staggered */
+.hero__eyebrow, .hero h1, .hero p.lead, .hero__cta, .hero__stats,
+.mockwin, .homegrid{
+  animation: hero-in .6s cubic-bezier(.21,.7,.3,1) both;
+}
+.hero__eyebrow{ animation-delay: .05s; }
+.hero h1{ animation-delay: .12s; }
+.hero p.lead{ animation-delay: .2s; }
+.hero__cta{ animation-delay: .28s; }
+.hero__stats{ animation-delay: .36s; }
+.mockwin{ animation-delay: .2s; }
+.homegrid{ animation-delay: .44s; }
+@keyframes hero-in{
+  from{ opacity: 0; transform: translateY(16px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+/* home cards — lift + glow + icon wiggle on hover */
+.homecard{
+  transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.homecard:hover{
+  transform: translateY(-4px);
+  background: var(--bg-elevated);
+  box-shadow: 0 10px 30px rgba(0,0,0,.35), 0 0 0 1px rgba(143,163,255,.25);
+}
+.homecard:hover .homecard__icon{
+  transform: scale(1.12) rotate(-6deg);
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 18px rgba(143,163,255,.25);
+}
+.homecard__icon{
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+/* nav links — smooth state changes + active indicator pulse */
+.navlink{ transition: background .15s ease, color .15s ease; }
+.navlink .dot{ transition: background .15s ease, box-shadow .15s ease, transform .15s ease; }
+.navlink:hover .dot, .navlink.is-active .dot{ box-shadow: 0 0 0 3px var(--accent-soft); }
+.navgroup__head{ transition: background .15s ease; }
+.navgroup__list li{ animation: list-in .18s ease both; }
+.navgroup.is-open .navgroup__list li{ animation: list-in .22s ease both; }
+@keyframes list-in{
+  from{ opacity: 0; transform: translateX(-5px); }
+  to{ opacity: 1; transform: translateX(0); }
+}
+body[dir="rtl"] .navgroup.is-open .navgroup__list li{ animation-name: list-in-rtl; }
+@keyframes list-in-rtl{
+  from{ opacity: 0; transform: translateX(5px); }
+  to{ opacity: 1; transform: translateX(0); }
+}
+
+/* buttons — lift on hover */
+.btn{ transition: transform .15s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.btn:hover{ transform: translateY(-2px); }
+.btn-primary:hover{ box-shadow: 0 8px 22px rgba(143,163,255,.35); }
+
+/* code blocks — subtle glow line on the left that lights up on hover */
+.codeblock{ transition: border-color .2s ease, box-shadow .2s ease; }
+.codeblock:hover{ border-color: var(--border-strong); box-shadow: 0 0 0 1px rgba(143,163,255,.08), 0 8px 26px rgba(0,0,0,.28); }
+
+/* page header filehead — slight pop */
+.filehead{ transition: border-color .2s ease; }
+
+/* copy button — success pop */
+.codeblock__copy{ transition: color .15s ease, border-color .15s ease, transform .15s ease; }
+.codeblock__copy:active{ transform: scale(.92); }
+
+/* the mock editor window — gentle float to feel "running" */
+.mockwin{ animation: mockwin-in .6s cubic-bezier(.21,.7,.3,1) both, mockwin-float 7s ease-in-out .9s infinite alternate; }
+@keyframes mockwin-in{
+  from{ opacity: 0; transform: translateY(18px) scale(.985); }
+  to{ opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes mockwin-float{
+  from{ transform: translateY(0); }
+  to{ transform: translateY(-7px); }
+}
+
+/* search results — pop in */
+.search-results.is-open{ animation: sr-in .16s ease both; }
+@keyframes sr-in{
+  from{ opacity: 0; transform: translateY(-4px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+/* module map cards — hover lift */
+.modulemap__card{ transition: transform .16s ease, border-color .16s ease, background .16s ease; }
+.modulemap__card:hover{ transform: translateY(-2px); border-color: var(--border-strong); background: var(--bg-hover); }
+
+/* pager cards — lift */
+.pagernav a{ transition: transform .16s ease, border-color .16s ease, background .16s ease; }
+.pagernav a:hover{ transform: translateY(-2px); }
+
+/* language switch pill — active slide-in glow */
+.langswitch button{ transition: background .15s ease, color .15s ease; }
+
+
+/* ==========================================================================
    Responsive
    ========================================================================== */
 
@@ -846,6 +1027,7 @@ footer.sitefoot a{ color: var(--text-muted); }
   }
   body[dir="rtl"] .sidebar{ transform: translateX(102%); }
   .sidebar.is-open{ transform: translateX(0); }
+  body[dir="rtl"] .sidebar.is-open{ transform: translateX(0); }
   .topbar__menu{ display: flex; }
   .overlay.is-open{ display: block; }
   .brand__name small{ display: none; }

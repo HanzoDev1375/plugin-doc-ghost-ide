@@ -2,7 +2,7 @@
   'use strict';
 
   var SITE = {
-    githubUrl: 'https://github.com/hanzodev1375',
+    githubUrl: 'https://github.com/HanzoDev1375/GhostIdes',
     version: 'plugin-api 0.1.0'
   };
 
@@ -297,6 +297,29 @@
     });
   }
 
+  function setupReveal(root){
+    var targets = root.querySelectorAll('.prose > *');
+    if (!targets.length) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    targets.forEach(function(el, i){
+      el.classList.add('reveal');
+      el.style.transitionDelay = (Math.min(i, 6) * 50) + 'ms';
+    });
+    if (!('IntersectionObserver' in window)) {
+      targets.forEach(function(el){ el.classList.add('is-visible'); });
+      return;
+    }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (en.isIntersecting) {
+          en.target.classList.add('is-visible');
+          io.unobserve(en.target);
+        }
+      });
+    }, { threshold: 0.05, rootMargin: '0px 0px -40px 0px' });
+    targets.forEach(function(el){ io.observe(el); });
+  }
+
   function buildSearchIndex(lang){
     var c = CONTENT[lang];
     var idx = [];
@@ -331,6 +354,7 @@
     else main.innerHTML = renderNotFound(lang);
 
     attachCopyHandlers(main);
+    setupReveal(main);
     window.scrollTo(0, 0);
     closeSidebar();
     closeSearch();

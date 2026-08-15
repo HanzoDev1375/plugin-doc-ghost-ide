@@ -35,6 +35,9 @@ var CONTENT_FA = {
       'ide-host-services': 'IdeHostServices',
       'editor-host': 'EditorHost',
       'file-manager-host': 'FileManagerHost',
+      'code-runner-host': 'CodeRunnerHost',
+      'editor-panel': 'EditorPanel',
+      'editor-action-handler': 'EditorActionHandler',
       'plugin-screen': 'PluginScreen',
       'gpl-format': 'فرمت .gpl',
       'build-plugin': 'ساخت پلاگین',
@@ -52,7 +55,7 @@ var CONTENT_FA = {
     ctaSecondary: 'مخزن گیت‌هاب',
     stats: [
       { value: '۳', label: 'ماژول API مستقل' },
-      { value: '۲', label: 'اکستنشن‌پوینت آماده' },
+      { value: '۴', label: 'اکستنشن‌پوینت آماده' },
       { value: 'Java 17', label: 'زبان و نسخه' }
     ],
     mock: {
@@ -116,7 +119,7 @@ var CONTENT_FA = {
         { type: 'modulemap', items: [
           { name: 'plugin-api', desc: 'مدل پلاگین، PluginContext، ExtensionPoint/Registry، ServiceKey/Registry، GlobalRegistry.' },
           { name: 'ide-api', desc: 'وابسته به plugin-api. اکستنشن‌پوینت LSP_SERVER_PROVIDER برای افزودن Language Server.' },
-          { name: 'ide-ui-api', desc: 'وابسته به plugin-api. اکستنشن‌پوینت PLUGIN_SCREEN و سرویس‌های EditorHost/FileManagerHost.' }
+          { name: 'ide-ui-api', desc: 'وابسته به plugin-api. اکستنشن‌پوینت‌های PLUGIN_SCREEN / EDITOR_PANEL / EDITOR_ACTION_HANDLER و سرویس‌های EditorHost / FileManagerHost / CodeRunnerHost.' }
         ] },
         { type: 'p', text: 'ماژول `:app` (خود اپ) به هر سه بستگی دارد و در واقع تنها جایی است که پیاده‌سازی واقعی رجیستری‌ها (`DefaultExtensionRegistry`, `DefaultServiceRegistry`) و بارگذار پلاگین (`GplPluginLoader`) در آن زندگی می‌کند. کد پلاگین هرگز مستقیم با کلاس‌های داخلی `:app` صحبت نمی‌کند — فقط با رابط‌های `plugin-api`/`ide-api`/`ide-ui-api`.' },
         { type: 'h2', text: 'دو رجیستری مشترک' },
@@ -151,8 +154,14 @@ var CONTENT_FA = {
         ] },
         { type: 'code', filename: 'build.gradle', lang: 'gradle', code:
 `dependencies {
-  compileOnly 'ir.hanzodev1375.ghostide:plugin-api:0.1.0'
+  // plugin-api و ide-api و ide-ui-api هیچ کجای عمومی منتشر نشده‌اند.
+  // آن‌ها را از GitHub Actions (آرتیفکت "ghostide-plugin-sdk")
+  // یا از یک Release دانلود کن و به فایل‌های محلی jar/aar اشاره بده:
+  compileOnly files('libs/plugin-api.jar')
+  compileOnly files('libs/ide-api.jar')
+  compileOnly files('libs/ide-ui-api.aar')
 }` },
+        { type: 'note', variant: 'info', text: 'گروه `ir.hanzodev1375.ghostide:...` **هیچ‌جا منتشر نشده** — خود اپ میزبان این APIها را همراه دارد. فایل‌های آماده را از آرتیفکت **ghostide-plugin-sdk** در [GitHub Actions](https://github.com/HanzoDev1375/GhostIdes/actions) یا از یک [Release](https://github.com/HanzoDev1375/GhostIdes/releases) مخزن Ghost IDE دانلود کن.' },
         { type: 'note', variant: 'tip', text: 'برای دیدن این شش قدم با کد کامل و واقعی، برو سراغ [نمونه‌ی Hello Ghost](#/example/hello-world) — دقیقاً همین مسیر را از اول تا آخر طی می‌کند.' }
       ]
     },
@@ -371,10 +380,12 @@ public List<PluginSetupAction> getSetupActions() {
       module: 'plugin-api',
       dek: 'قراردادی که یک گروه از قابلیت‌های ثبت‌شده باید پیاده کنند.',
       blocks: [
-        { type: 'p', text: 'یک `record` ساده شامل شناسه‌ی یکتا و نوع (`Class`) قراردادی که هر ثبت‌کننده باید پیاده کند. خود این پلتفرم فعلاً دو اکستنشن‌پوینت آماده دارد:' },
+        { type: 'p', text: 'یک `record` ساده شامل شناسه‌ی یکتا و نوع (`Class`) قراردادی که هر ثبت‌کننده باید پیاده کند. خود این پلتفرم فعلاً چهار اکستنشن‌پوینت آماده دارد:' },
         { type: 'table', headers: ['اکستنشن‌پوینت', 'نوع', 'ماژول'], rows: [
           ['`EditorExtensionPoints.LSP_SERVER_PROVIDER`', '`LspServerProvider`', '`ide-api`'],
-          ['`PluginUiExtensionPoints.PLUGIN_SCREEN`', '`PluginScreen`', '`ide-ui-api`']
+          ['`PluginUiExtensionPoints.PLUGIN_SCREEN`', '`PluginScreen`', '`ide-ui-api`'],
+          ['`PluginUiExtensionPoints.EDITOR_PANEL`', '`EditorPanel`', '`ide-ui-api`'],
+          ['`PluginUiExtensionPoints.EDITOR_ACTION_HANDLER`', '`EditorActionHandler`', '`ide-ui-api`']
         ] },
         { type: 'code', filename: 'ExtensionPoint.java', lang: 'java', code:
 `public record ExtensionPoint<T>(String id, Class<T> type) {
@@ -388,7 +399,7 @@ public List<PluginSetupAction> getSetupActions() {
     }
   }
 }` },
-        { type: 'p', text: 'برای جزئیات هر کدام، صفحه‌ی [LspServerProvider](#/lsp/lsp-server-provider) یا [PluginScreen](#/ui/plugin-screen) را ببین.' }
+        { type: 'p', text: 'برای جزئیات هر کدام، صفحه‌ی [LspServerProvider](#/lsp/lsp-server-provider)، [PluginScreen](#/ui/plugin-screen)، [EditorPanel](#/ui/editor-panel) یا [EditorActionHandler](#/ui/editor-action-handler) را ببین.' }
       ]
     },
 
@@ -490,7 +501,7 @@ public List<PluginSetupAction> getSetupActions() {
     }
   }
 }` },
-        { type: 'p', text: 'ماژول `ide-ui-api` سه کلید آماده منتشر می‌کند — `IdeHostServices.EDITOR_HOST`, `FILE_MANAGER_HOST` و `PLUGIN_ANDROID_CONTEXT`. جزئیات در صفحه‌ی [IdeHostServices](#/ui/ide-host-services).' }
+        { type: 'p', text: 'ماژول `ide-ui-api` پنج کلید آماده منتشر می‌کند — `IdeHostServices.EDITOR_HOST`, `FILE_MANAGER_HOST`, `CODE_RUNNER_HOST`, `PLUGIN_ANDROID_CONTEXT` و `PROOT_PROCESS_LAUNCHER`. جزئیات در صفحه‌ی [IdeHostServices](#/ui/ide-host-services).' }
       ]
     },
 
@@ -686,7 +697,7 @@ public interface LspServerConnectionFactory {
       blocks: [
         { type: 'p', text: '`ide-ui-api` یک کتابخانه‌ی اندرویدی است (namespace: `ir.hanzodev1375.ghostide.ide.ui.api`، `minSdk 26`، `compileSdk 36`) که روی `plugin-api` و `androidx.appcompat` سوار می‌شود.' },
         { type: 'note', variant: 'info', text: 'اندروید اجازه نمی‌دهد کد بارگذاری‌شده در زمان اجرا یک `<activity>` تازه در مانیفست میزبان اعلام کند. به همین دلیل "صفحه" یک پلاگین در واقع یک `Fragment` است، نه یک Activity — همان تکنیکی که چارچوب‌های پلاگین اندرویدی معمولاً استفاده می‌کنند. اپ میزبان یک اکتیویتی میزبان‌کننده‌ی صفحه دارد که این Fragment را نمایش می‌دهد.' },
-        { type: 'p', text: 'برای افزودن یک صفحه، رابط [PluginScreen](#/ui/plugin-screen) را ببین. برای دسترسی به ادیتور یا فایل‌منیجر باز، رابط‌های [EditorHost](#/ui/editor-host) و [FileManagerHost](#/ui/file-manager-host) را ببین.' }
+        { type: 'p', text: 'برای افزودن یک صفحه، رابط [PluginScreen](#/ui/plugin-screen) را ببین. برای بازکردن پنل داخل ادیتورِ در حال اجرا، [EditorPanel](#/ui/editor-panel) را ببین. برای دسترسی به ادیتور یا فایل‌منیجر باز، رابط‌های [EditorHost](#/ui/editor-host) و [FileManagerHost](#/ui/file-manager-host) را ببین. برای اجرای کد یا دستور شل، [CodeRunnerHost](#/ui/code-runner-host) را ببین. برای هندل محلی دستورهای سرور زبان، [EditorActionHandler](#/ui/editor-action-handler) را ببین.' }
       ]
     },
 
@@ -705,8 +716,14 @@ public interface LspServerConnectionFactory {
   public static final ServiceKey<FileManagerHost> FILE_MANAGER_HOST =
       new ServiceKey<>("ir.hanzodev1375.ghostide.ui.fileManagerHost", FileManagerHost.class);
 
+  public static final ServiceKey<CodeRunnerHost> CODE_RUNNER_HOST =
+      new ServiceKey<>("ir.hanzodev1375.ghostide.ui.codeRunnerHost", CodeRunnerHost.class);
+
   public static final ServiceKey<Context> PLUGIN_ANDROID_CONTEXT =
       new ServiceKey<>("ir.hanzodev1375.ghostide.ui.pluginAndroidContext", Context.class);
+
+  public static final ServiceKey<ProotProcessLauncher> PROOT_PROCESS_LAUNCHER =
+      new ServiceKey<>("ir.hanzodev1375.ghostide.ui.prootProcessLauncher", ProotProcessLauncher.class);
 }` },
         { type: 'h2', text: 'PLUGIN_ANDROID_CONTEXT' },
         { type: 'p', text: 'یک `Context` مخصوص خودِ پلاگین، نه اکتیویتی میزبان. برای `inflate` کردن layout یک `PluginScreen` باید از همین Context عبور کنی، نه از inflater پیش‌فرض اکتیویتی میزبان — وگرنه شناسه‌های `R.layout` خودِ پلاگین resolve نمی‌شوند.' },
@@ -714,7 +731,9 @@ public interface LspServerConnectionFactory {
 `Context pluginContext = context.getServices().require(IdeHostServices.PLUGIN_ANDROID_CONTEXT);
 LayoutInflater.from(pluginContext)
     .cloneInContext(pluginContext)
-    .inflate(R.layout.my_screen, container, false);` }
+    .inflate(R.layout.my_screen, container, false);` },
+        { type: 'h2', text: 'CODE_RUNNER_HOST' },
+        { type: 'p', text: 'سرویسی که پلاگین وقتی می‌خواهد کدی یا دستوری را اجرا کند از آن استفاده می‌کند — [CodeRunnerHost](#/ui/code-runner-host) را ببین.' }
       ]
     },
 
@@ -739,10 +758,21 @@ LayoutInflater.from(pluginContext)
   void openFile(File file);
 
   Context getContext();
+
+  // اختیاری: ادیتور خام، یا null وقتی فایلی باز نیست
+  Object getEditor();
 }` },
         { type: 'code', filename: 'HelloGhostPlugin.java', lang: 'java', code:
 `EditorHost editor = context.getServices().require(IdeHostServices.EDITOR_HOST);
-editor.setEditorText(editor.getEditorText() + "\\n// added by HelloGhost");` }
+editor.setEditorText(editor.getEditorText() + "\\n// added by HelloGhost");` },
+        { type: 'h2', text: 'getEditor()' },
+        { type: 'p', text: 'متدهای ساده‌ی بالا برای بیشتر پلاگین‌ها کافی‌اند. `getEditor()` راه فرار است: خودِ ویجت ادیتورِ پشت تب فعلی را برمی‌گرداند — یعنی `IdeEditor` میزبان — به‌صورت `Object`، یا وقتی فایلی باز نیست `null` برمی‌گرداند. `IdeEditor` در ماژول ادیتورِ میزبان زندگی می‌کند نه در این API، پس آن ماژول را به‌صورت `compileOnly` اضافه کن و cast کن:' },
+        { type: 'code', filename: 'HelloGhostPlugin.java', lang: 'java', code:
+`Object raw = editor.getEditor();
+if (raw instanceof IdeEditor ide) {   // add ':editor' as compileOnly to cast
+  String path = ide.getCurrentFilePath();
+  ide.getLspEditor();
+}` }
       ]
     },
 
@@ -771,6 +801,129 @@ fileManager.refresh();` }
       ]
     },
 
+    'code-runner-host': {
+      title: 'CodeRunnerHost',
+      filename: 'CodeRunnerHost.java',
+      module: 'ide-ui-api',
+      dek: 'یک دستور شل یا یک فایل منبع را در ترمینال IDE اجرا می‌کند — دقیقاً مثل زدن دکمه‌ی اجرای (FAB) ادیتور.',
+      blocks: [
+        { type: 'p', text: 'میزبان این سرویس را زیر `IdeHostServices.CODE_RUNNER_HOST` ثبت می‌کند. هر وقت پلاگین‌ت نیاز به اجرای کد یا دستور شل داشت از آن استفاده کن — دستور به ترمینال IDE سپرده می‌شود که یا به‌صورت bottom sheet باز می‌شود یا تمام‌صفحه.' },
+        { type: 'code', filename: 'CodeRunnerHost.java', lang: 'java', code:
+`public interface CodeRunnerHost {
+
+  void runShell(String command, boolean asBottomSheet);
+
+  void runCurrentFile(boolean asBottomSheet);
+
+  void runFile(String filePath, boolean asBottomSheet);
+
+  boolean isSupported(String filePath);
+}` },
+        { type: 'table', headers: ['متد', 'توضیح'], rows: [
+          ['`runShell(command, asBottomSheet)`', 'هر دستور شلی را در ترمینال اجرا می‌کند.'],
+          ['`runCurrentFile(asBottomSheet)`', 'فایلی را که الان در ادیتور باز است اجرا می‌کند، مثل دکمه‌ی FAB.'],
+          ['`runFile(filePath, asBottomSheet)`', 'یک فایل مشخص را با مسیر آن اجرا می‌کند.'],
+          ['`isSupported(filePath)`', 'اگر `true` بود یعنی اجراکننده آن نوع فایل را می‌شناسد.']
+        ] },
+        { type: 'p', text: 'آرگومان `asBottomSheet` تعیین می‌کند ترمینال چطور نمایش داده شود: `true` یعنی bottom sheet، `false` یعنی تمام‌صفحه.' },
+        { type: 'code', filename: 'HelloGhostPlugin.java', lang: 'java', code:
+`CodeRunnerHost runner = context.getServices().require(IdeHostServices.CODE_RUNNER_HOST);
+
+// اجرای هر دستوری در ترمینال
+runner.runShell("python3 main.py", true);
+
+// اجرای فایل بازِ فعلی ادیتور
+runner.runCurrentFile();
+
+// اجرای یک فایل مشخص
+runner.runFile("/sdcard/Project/main.py", false);
+
+// بررسی قبل از اجرا
+if (runner.isSupported("/sdcard/Project/main.py")) {
+  runner.runFile("/sdcard/Project/main.py", true);
+}` },
+        { type: 'note', variant: 'tip', text: '`runCurrentFile()` مسیر را از `EditorPanel`های ثبت‌شده می‌گیرد: اولین `EditorPanel.getLastPath()` غیرخالی برنده است، وگرنه به فایل بازِ ادیتور برمی‌گردد. [EditorPanel](#/ui/editor-panel) را ببین.' }
+      ]
+    },
+
+    'editor-panel': {
+      title: 'EditorPanel',
+      filename: 'EditorPanel.java',
+      module: 'ide-ui-api',
+      dek: 'یک پنل UI که پلاگین داخل صفحه‌ی بازِ ادیتور باز می‌کند — معادل «webview / side panel» در VS Code.',
+      blocks: [
+        { type: 'p', text: 'یک پیاده‌سازی را در `PluginUiExtensionPoints.EDITOR_PANEL` ثبت کن. میزبان فقط یک‌بار، وقتی پنل اولین بار نمایش داده می‌شود، `View` آن را می‌سازد و تا پایان عمر اکتیویتی نگهش می‌دارد؛ پس view را تنبل (lazy) بساز و حالتش را داخل خودش نگه دار.' },
+        { type: 'code', filename: 'EditorPanel.java', lang: 'java', code:
+`public interface EditorPanel {
+
+  String getId();
+
+  String getTitle();
+
+  View createView();
+
+  // اختیاری: این پنل به چه فایل/مسیری اشاره دارد
+  default String getLastPath() {
+    return null;
+  }
+}` },
+        { type: 'p', text: 'برای inflate باید از Context مخصوص خودِ پلاگین استفاده کنی، وگرنه شناسه‌های `R.layout` تو resolve نمی‌شوند:' },
+        { type: 'code', filename: 'MyPanel.java', lang: 'java', code:
+`Context pluginContext = context.getServices().require(IdeHostServices.PLUGIN_ANDROID_CONTEXT);
+View view = LayoutInflater.from(pluginContext)
+    .cloneInContext(pluginContext)
+    .inflate(R.layout.my_panel, root, false);` },
+        { type: 'h2', text: 'getLastPath()' },
+        { type: 'p', text: 'مسیری را برمی‌گرداند که پنل در حال حاضر درباره‌ی آن است — مثلاً فایلی که کاربر پنل انتخاب کرده. میزبان هنگام اجرای فایل جاری (`CodeRunnerHost.runCurrentFile()`) به `getLastPath()` همه‌ی پنل‌ها نگاه می‌کند؛ اگر `null` برگردانی، به فایل بازِ ادیتور سقوط می‌کند.' },
+        { type: 'note', variant: 'tip', text: 'برای نمایش پنل با نوع پنجره‌ی متفاوت، `getState()` را override کن یا `setState(PluginStateMod)` صدا بزن — side sheet، dialog، bottom sheet و بقیه همگی پشتیبانی می‌شوند.' }
+      ]
+    },
+
+    'editor-action-handler': {
+      title: 'EditorActionHandler',
+      filename: 'EditorActionHandler.java',
+      module: 'ide-ui-api',
+      dek: 'به پلاگین اجازه می‌دهد دستورهای LSP خودش را محلی مدیریت کند، به‌جای فرستادن دوباره‌شان به سرور زبان.',
+      blocks: [
+        { type: 'p', text: 'دستورهایی که ادیتور از code actionهای LSP دریافت می‌کند معمولاً با `workspace/executeCommand` دوباره به سرور فرستاده می‌شوند. ثبت یک `EditorActionHandler` در `PluginUiExtensionPoints.EDITOR_ACTION_HANDLER` به پلاگین‌ت اجازه می‌دهد دستورهای خودش را محلی هندل کند — جایی که خودِ ویجت ادیتور در دسترس است.' },
+        { type: 'code', filename: 'EditorActionHandler.java', lang: 'java', code:
+`public interface EditorActionHandler {
+
+  String getCommandId();
+
+  boolean execute(Object editor, String command, List<Object> arguments);
+}` },
+        { type: 'table', headers: ['متد', 'توضیح'], rows: [
+          ['`getCommandId()`', 'شناسه‌ی دستوری که این هندلر مالکش است — ادیتور فقط برای دستورهای با همین شناسه صداات می‌زند.'],
+          ['`execute(editor, command, arguments)`', 'دستور را اجرا می‌کند. اگر `true` برگردانی یعنی هندل شد؛ `false` یعنی ادیتور مثل قبل به سرور بفرستد.']
+        ] },
+        { type: 'p', text: 'آرگومان `editor` همان ویجت خام `IdeEditor` پشت اکشن است (به‌صورت `Object`، چون `IdeEditor` در ماژول ادیتورِ میزبان زندگی می‌کند نه در این API)، یا وقتی ادیتوری متصل نیست `null`. برای cast کردن، ماژول ادیتور میزبان را به‌صورت `compileOnly` اضافه کن:' },
+        { type: 'code', filename: 'MyActionHandler.java', lang: 'java', code:
+`public final class MyActionHandler implements EditorActionHandler {
+
+  @Override
+  public String getCommandId() {
+    return "com.example.myplugin.run";
+  }
+
+  @Override
+  public boolean execute(Object editor, String command, List<Object> arguments) {
+    if (editor instanceof IdeEditor ide) {   // add ':editor' as compileOnly to cast
+      ide.getCurrentFilePath();
+    }
+    return true;
+  }
+}` },
+        { type: 'code', filename: 'RustPlugin.java', lang: 'java', code:
+`context.getExtensions().register(
+    PluginUiExtensionPoints.EDITOR_ACTION_HANDLER,
+    new MyActionHandler(),
+    context.getDescriptor().getId(),
+    0);` },
+        { type: 'note', variant: 'warn', text: '`execute` ممکن است روی یک thread پس‌زمینه اجرا شود؛ قبل از دست‌زدن به ادیتور به thread اصلی برگرد.' }
+      ]
+    },
+
     'plugin-screen': {
       title: 'PluginScreen',
       filename: 'PluginScreen.java',
@@ -789,8 +942,16 @@ fileManager.refresh();` }
         { type: 'p', text: 'نمونه را در اکستنشن‌پوینت `PluginUiExtensionPoints.PLUGIN_SCREEN` ثبت کن. layout و منابع Fragment از بسته‌ی `.gpl` خودِ پلاگین می‌آیند، نه از منابع اپ میزبان.' },
         { type: 'code', filename: 'PluginUiExtensionPoints.java', lang: 'java', code:
 `public final class PluginUiExtensionPoints {
+
   public static final ExtensionPoint<PluginScreen> PLUGIN_SCREEN =
       new ExtensionPoint<>("ir.hanzodev1375.ghostide.ui.pluginScreen", PluginScreen.class);
+
+  public static final ExtensionPoint<EditorPanel> EDITOR_PANEL =
+      new ExtensionPoint<>("ir.hanzodev1375.ghostide.ui.editorPanel", EditorPanel.class);
+
+  public static final ExtensionPoint<EditorActionHandler> EDITOR_ACTION_HANDLER =
+      new ExtensionPoint<>(
+          "ir.hanzodev1375.ghostide.ui.editorActionHandler", EditorActionHandler.class);
 }` },
         { type: 'p', text: 'برای یک پیاده‌سازی کامل — شامل خودِ Fragment — به [نمونه‌ی Hello Ghost](#/example/hello-world) نگاه کن.' }
       ]
@@ -814,7 +975,8 @@ fileManager.refresh();` }
           ['`version`', 'رشته', 'اجباری.'],
           ['`entryClass`', 'رشته', 'اجباری — نام کامل کلاسِ پیاده‌کننده‌ی `GhostPlugin`، با سازنده‌ی بدون‌آرگومان و public.'],
           ['`description`', 'رشته', 'اختیاری؛ پیش‌فرض رشته‌ی خالی.'],
-          ['`minHostVersion`', 'عدد صحیح', 'اختیاری؛ پیش‌فرض `۰`. کمترین versionCode اپ میزبان که این پلاگین را پشتیبانی می‌کند.']
+          ['`minHostVersion`', 'عدد صحیح', 'اختیاری؛ پیش‌فرض `۰`. کمترین versionCode اپ میزبان که این پلاگین را پشتیبانی می‌کند.'],
+          ['`icon`', 'رشته', 'اختیاری؛ نام یک فایل PNG/JPG داخل `assets/` (همان پوشه‌ی `plugin.json`). اگر نباشد، پلاگین آیکن ندارد.']
         ] },
         { type: 'code', filename: 'assets/plugin.json', lang: 'json', code:
 `{
@@ -823,7 +985,8 @@ fileManager.refresh();` }
   "version": "1.0.0",
   "entryClass": "com.example.helloghost.HelloGhostPlugin",
   "description": "یک صفحه‌ی نمونه به Ghost IDE اضافه می‌کند.",
-  "minHostVersion": 1
+  "minHostVersion": 1,
+  "icon": "icon.png"
 }` },
         { type: 'note', variant: 'warn', text: 'اگر `assets/plugin.json` داخل zip نباشد یا JSON نامعتبر باشد، بارگذاری با خطا شکست می‌خورد و پلاگین اصلاً فعال نمی‌شود.' }
       ]
@@ -848,6 +1011,7 @@ fileManager.refresh();` }
 cd build/dex
 zip -r ../hello-ghost.gpl classes.dex ../../assets/plugin.json -j
 mv ../../assets/plugin.json assets/plugin.json 2>/dev/null || true` },
+        { type: 'note', variant: 'tip', text: 'برای کامپایل در برابر APIها به فایل‌های آماده‌ی `plugin-api.jar` / `ide-api.jar` / `ide-ui-api.aar` نیاز داری — آن‌ها را از آرتیفکت **ghostide-plugin-sdk** در [GitHub Actions](https://github.com/HanzoDev1375/GhostIdes/actions) یا از یک [Release](https://github.com/HanzoDev1375/GhostIdes/releases) بردار.' },
         { type: 'note', variant: 'tip', text: 'ساده‌ترین راه برای اطمینان از ساختار درست، این است که پیش از فشرده‌سازی یک پوشه‌ی موقت با همین چیدمان بسازی: `classes.dex` در ریشه و `assets/plugin.json` داخل زیرپوشه‌ی `assets/` — دقیقاً همان چیزی که `GplManifestReader` با نام `assets/plugin.json` جست‌وجو می‌کند.' }
       ]
     },
@@ -896,7 +1060,15 @@ mv ../../assets/plugin.json assets/plugin.json 2>/dev/null || true` },
   return dir;
 }` },
         { type: 'p', text: 'در زمان استارتاپ، `loadAll(context, loader)` تمام فایل‌های این پوشه را اسکن می‌کند و برای هر شناسه‌ای که هنوز بارگذاری نشده، `loader.load(file)` را صدا می‌زند.' },
-        { type: 'note', variant: 'tip', text: 'یک پلاگین خراب یا مانیفست نامعتبر باعث توقف کل اسکن نمی‌شود — فقط همان یکی رد می‌شود و بقیه‌ی پلاگین‌ها عادی بالا می‌آیند.' }
+        { type: 'note', variant: 'tip', text: 'یک پلاگین خراب یا مانیفست نامعتبر باعث توقف کل اسکن نمی‌شود — فقط همان یکی رد می‌شود و بقیه‌ی پلاگین‌ها عادی بالا می‌آیند.' },
+        { type: 'h2', text: 'پلاگین‌ها از کجا میان؟' },
+        { type: 'p', text: 'پلاگین‌ها هیچ‌جای جداگانه‌ای منتشر نمی‌شوند. باندل‌های آماده‌ی `.gpl` از خودِ مخزن Ghost IDE به اشتراک گذاشته می‌شوند — یا از تب **Actions** همان رانِ ورک‌فلو، یا از پیوست‌های فایل یک **Release** دانلودشان کن:' },
+        { type: 'code', filename: 'GitHub', lang: 'text', code:
+`https://github.com/HanzoDev1375/GhostIdes
+
+Releases -> می‌توانی فایل .gpl را به یک Release پیوست کنی و کاربران از آنجا بردارند
+Actions  -> هر ران ورک‌فلو آرتیفکت‌هایش را ۹۰ روز نگه می‌دارد، از جمله باندل‌های .gpl` },
+        { type: 'note', variant: 'info', text: 'آرتیفکت `app-debug` خودِ APK است، `ghostide-plugin-sdk` شامل jar/aarهایی است که برای کامپایل پلاگین لازم داری، و هر باندل `.gpl` که نویسنده‌ی پلاگین می‌خواهد به اشتراک بگذارد هم به‌صورت پیوست Release یا آرتیفکت ورک‌فلو در دسترس است.' }
       ]
     },
 
@@ -991,7 +1163,8 @@ public final class HelloScreen implements PluginScreen {
   "version": "1.0.0",
   "entryClass": "com.example.helloghost.HelloGhostPlugin",
   "description": "یک صفحه‌ی نمونه به Ghost IDE اضافه می‌کند.",
-  "minHostVersion": 1
+  "minHostVersion": 1,
+  "icon": "icon.png"
 }` },
         { type: 'h2', text: '۴. بسته‌بندی و نصب' },
         { type: 'list', ordered: true, items: [
